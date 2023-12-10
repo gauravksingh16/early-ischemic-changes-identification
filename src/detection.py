@@ -142,6 +142,28 @@ X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.
 #-------------------------------------------------------------------------------------------------------------------
 
 # Step 2: Define the UNet model
+class ResizeLayer(Layer):
+    def __init__(self, target_shape, **kwargs):
+        super(ResizeLayer, self).__init__(**kwargs)
+        self.target_shape = target_shape
+
+    def build(self, input_shape):
+        super(ResizeLayer, self).build(input_shape)
+
+    def call(self, inputs, training=None):
+        # Ensure that the input shape matches the expected shape
+        if inputs.shape[1] != np.prod(self.target_shape):
+            raise ValueError(f"Expected input shape ({np.prod(self.target_shape)}), but got {inputs.shape}")
+
+        # Reshape the input to the target shape
+        resized_inputs = tf.reshape(inputs, (-1,) + self.target_shape)
+
+        return resized_inputs
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0],) + self.target_shape
+
+# Modify the model creation function
 def create_unet_model(input_shape, output_shape=(128, 128, 16), output_channels=1):
     model = Sequential()
 
@@ -156,21 +178,19 @@ def create_unet_model(input_shape, output_shape=(128, 128, 16), output_channels=
 
     # Add a Flatten layer to convert 3D output to 1D
     model.add(Flatten())
-
-    # Calculate the total number of elements in the output shape
-    output_size = np.prod(output_shape)
-
-    # Add a Dense layer with the correct number of units
-    model.add(Dense(units=output_size, activation='sigmoid'))
-
-    # Add a Reshape layer with the correct target shape
-    model.add(Reshape(target_shape=output_shape))
+    # Resize the output to the target shape
+    model.add(ResizeLayer(output_shape))
 
     return model
 
-# Step 3: Compile the model
 model = create_unet_model(input_shape=(512, 512, 58, 1))
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+# Step 5: Train the model
+history = model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_val, y_val))
+
+# Step 6: Save the pre-trained model
+model.save('hypodensity_segmentation_model.h5')
 
 # Step 4: Train the model
 history = model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_val, y_val))
