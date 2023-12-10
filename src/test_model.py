@@ -2,6 +2,9 @@
 from tensorflow.keras.models import load_model
 from sklearn.metrics import accuracy_score, f1_score
 
+from src.detection import X_test, y_test
+
+
 def test_model(model_path, X_test, y_test):
     # Load the pre-trained model
     pretrained_model = load_model(model_path)
