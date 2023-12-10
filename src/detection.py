@@ -7,6 +7,10 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from tensorflow.keras import models, layers
 from skimage import exposure, filters
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv3D, MaxPooling3D, Conv3DTranspose, Dense, Reshape, Flatten
+
 
 # Step 1: Load the Dataset
 data_dir = "../data/HYPODENSITY-DATA"
@@ -134,44 +138,53 @@ X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.
 
 #-------------------------------------------------------------------------------------------------------------------
 
-#defining unet 3d model
-def unet_3d_model(input_shape=(512, 512, 58, 1)):
-    inputs = layers.Input(input_shape)
+# Step 2: Define the UNet model
+def create_unet_model(input_shape, output_shape=(128, 128, 16), output_channels=1):
+    model = Sequential()
 
     # Encoder
-    conv1 = layers.Conv3D(64, (3, 3, 3), activation='relu', padding='same')(inputs)
-    conv1 = layers.Conv3D(64, (3, 3, 3), activation='relu', padding='same')(conv1)
-    pool1 = layers.MaxPooling3D(pool_size=(2, 2, 2))(conv1)
-
-    conv2 = layers.Conv3D(128, (3, 3, 3), activation='relu', padding='same')(pool1)
-    conv2 = layers.Conv3D(128, (3, 3, 3), activation='relu', padding='same')(conv2)
-    pool2 = layers.MaxPooling3D(pool_size=(2, 2, 2))(conv2)
-
-    # Mid-level
-    conv3 = layers.Conv3D(256, (3, 3, 3), activation='relu', padding='same')(pool2)
-    conv3 = layers.Conv3D(256, (3, 3, 3), activation='relu', padding='same')(conv3)
+    model.add(Conv3D(64, kernel_size=(3, 3, 3), activation='relu', padding='same', input_shape=input_shape))
+    model.add(Conv3D(64, kernel_size=(3, 3, 3), activation='relu', padding='same'))
+    model.add(MaxPooling3D(pool_size=(2, 2, 2)))
 
     # Decoder
-    up1 = layers.Conv3DTranspose(128, (2, 2, 2), strides=(2, 2, 2), padding='same')(conv3)
-    concat1 = layers.Concatenate(axis=-1)([conv2, up1])
-    conv4 = layers.Conv3D(128, (3, 3, 3), activation='relu', padding='same')(concat1)
-    conv4 = layers.Conv3D(128, (3, 3, 3), activation='relu', padding='same')(conv4)
+    model.add(Conv3DTranspose(64, kernel_size=(3, 3, 3), activation='relu', padding='same'))
+    model.add(Conv3DTranspose(output_channels, kernel_size=(3, 3, 3), activation='sigmoid', padding='same'))
 
-    up2 = layers.Conv3DTranspose(64, (2, 2, 2), strides=(2, 2, 2), padding='same')(conv4)
-    concat2 = layers.Concatenate(axis=-1)([conv1, up2])
-    conv5 = layers.Conv3D(64, (3, 3, 3), activation='relu', padding='same')(concat2)
-    conv5 = layers.Conv3D(64, (3, 3, 3), activation='relu', padding='same')(conv5)
+    # Add a Flatten layer to convert 3D output to 1D
+    model.add(Flatten())
 
-    # Output layer
-    output = layers.Conv3D(1, (1, 1, 1), activation='sigmoid')(conv5)
+    # Calculate the total number of elements in the output shape
+    output_size = np.prod(output_shape)
 
-    model = models.Model(inputs=inputs, outputs=output)
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    # Add a Dense layer with the correct number of units
+    model.add(Dense(units=output_size, activation='sigmoid'))
+
+    # Add a Reshape layer with the correct target shape
+    model.add(Reshape(target_shape=output_shape))
 
     return model
 
-# Create the 3D U-Net model
-model_3d = unet_3d_model()
+# Step 3: Compile the model
+model = create_unet_model(input_shape=(512, 512, 58, 1))
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
-# Print the model summary
-model_3d.summary()
+# Step 4: Train the model
+history = model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_val, y_val))
+
+# Step 5: Evaluate the model on the validation set
+val_loss, val_accuracy = model.evaluate(X_val, y_val)
+print(f"Validation Loss: {val_loss:.4f}")
+print(f"Validation Accuracy: {val_accuracy * 100:.2f}%")
+
+# Step 6: Make predictions on the test set
+predictions = model.predict(X_test)
+
+# Step 7: Visualization (Optional)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+
