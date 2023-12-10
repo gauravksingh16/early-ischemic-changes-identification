@@ -10,6 +10,9 @@ from skimage import exposure, filters
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv3D, MaxPooling3D, Conv3DTranspose, Dense, Reshape, Flatten
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import f1_score
+from sklearn.metrics import confusion_matrix
 
 
 # Step 1: Load the Dataset
@@ -187,4 +190,47 @@ plt.xlabel('Epoch')
 plt.ylabel('Loss')
 plt.legend()
 plt.show()
+
+# Function to calculate Dice score
+def dice_coefficient(y_true, y_pred):
+    intersection = np.sum(y_true * y_pred)
+    union = np.sum(y_true) + np.sum(y_pred)
+    return (2.0 * intersection) / (union + 1e-7)
+
+# Function to calculate volume analysis
+def calculate_volume_metrics(y_true, y_pred, voxel_spacing):
+    # Calculate volumes in cubic millimeters
+    volume_true = np.sum(y_true) * np.prod(voxel_spacing)
+    volume_pred = np.sum(y_pred) * np.prod(voxel_spacing)
+
+    # Calculate absolute volume difference
+    abs_volume_diff = np.abs(volume_true - volume_pred)
+
+    # Calculate relative volume difference
+    rel_volume_diff = abs_volume_diff / volume_true
+
+    return volume_true, volume_pred, abs_volume_diff, rel_volume_diff
+
+# Make predictions on the test set
+predictions_binary = (predictions > 0.5).astype(int)
+
+# Flatten the arrays for metrics calculation
+y_test_flat = y_test.flatten()
+predictions_flat = predictions_binary.flatten()
+
+# Calculate accuracy, Dice score, and volume metrics
+accuracy = accuracy_score(y_test_flat, predictions_flat)
+dice_score = dice_coefficient(y_test_flat, predictions_flat)
+conf_matrix = confusion_matrix(y_test_flat, predictions_flat)
+volume_true, volume_pred, abs_volume_diff, rel_volume_diff = calculate_volume_metrics(y_test_flat, predictions_flat, voxel_spacing=(1, 1, 1))
+
+# Print the results
+print(f"Accuracy: {accuracy * 100:.2f}%")
+print(f"Dice Score: {dice_score:.4f}")
+print("Confusion Matrix:")
+print(conf_matrix)
+print(f"Volume (True): {volume_true:.2f} mm^3")
+print(f"Volume (Predicted): {volume_pred:.2f} mm^3")
+print(f"Absolute Volume Difference: {abs_volume_diff:.2f} mm^3")
+print(f"Relative Volume Difference: {rel_volume_diff * 100:.2f}%")
 
